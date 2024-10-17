@@ -1,3 +1,5 @@
+# edited to avoid overfitting
+
 import os
 import numpy as np
 import tensorflow as tf
@@ -36,62 +38,81 @@ x_test = vectorize_sequences(test_data)
 y_train = np.asarray(train_labels).astype('float32') # convert to float32
 y_test = np.asarray(test_labels).astype('float32')
 
-
-# building model
+# setup net
 
 model = tf.keras.models.Sequential()
 model.add(tf.keras.Input((10000,)))
 model.add(tf.keras.layers.Dense(16, activation='relu'))
-model.add(tf.keras.layers.Dense(16, activation='relu'))
-model.add(tf.keras.layers.Dense(1, activation='sigmoid')) # outputs a single number between 0 & 1: a single probability
+model.add(tf.keras.layers.Dense(16 ,activation='relu'))
+model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
 
 # compile model
 
-model.compile(                                                   
-    optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.001),  
-    loss=tf.keras.losses.binary_crossentropy,                   
+model.compile(
+    optimizer='rmsprop',
+    loss='binary_crossentropy',
     metrics=['accuracy']
 )
 
-# get untrained baseline
-
-results = model.evaluate(x_test, y_test, verbose=0) # test our untrained net.
-print(f"loss: {results[0]}, accuracy: {results[1]}")
-
-# training
-
-partial_x_train = x_train[10000:]
-partial_y_train = y_train[10000:]
-
-x_val = x_train[:10000]
-y_val = y_train[:10000]
-
-history = model.fit( # note that a history object is returned by model.fit
-    partial_x_train,
-    partial_y_train,
-    epochs = 20,
-    batch_size = 512,
-    validation_data = (x_val, y_val)
+# train model
+ 
+model.fit(
+    x_train,                     # full training set
+    y_train,
+    epochs=early_stopping_epoch, # the epoch where overfitting starts
+    batch_size=512
 )
 
+# test
 
+results = model.evaluate(x_test, y_test, verbose=0)
 
+print(f"loss: {results[0]}, accuracy: {results[1]}") # accuracy better than before!
 
+# now we can actually use the net to predict how positive/negative reviews are
 
+model.predict(x_test[:10], verbose=0) # this yields probabilities: negative (0) or positive (1) ?
 
+def print_predictions(preds, init=0):
+    labels = ["negative", "positive"]
+    for i, pred in enumerate(preds.ravel()): # ravel() makes the array flat (1D)
+        print(f"Review n° {init+i} is {labels[int(pred > .5)]} | score: {pred:.5f}")
 
-# printing reviews
+# print out all reviews and scores
 
-#decoded_review = ' '.join(
-#    [                                      # get() works like [] but you can set a default
-#        reverse_word_index.get(i - 3, '?') # value if the key isn't found -3 because the first
-#        for i in train_data[100]           # three slots in the vocab are 0: "padding",
-#    ]                                      #                              1: "start of sequence",
-#)                                          #                              2: "unknown"
+print_predictions(model.predict(x_test[:10], verbose=0))
 
-#print(decoded_review)
+# function to find reviews
 
-# another method
-#decoded_review = ' '.join([reverse_word_index.get(i - 3, '?') for i in train_data[83]])
-#print(decoded_review, '\n\nlabel: ', train_labels[83])
+def review_finder(prediction, label):
+    for i in range(len(x_test)):                                       # looping through our test set
+        y_pred = round(model.predict(x_test[i:i+1], verbose=0)[0, 0])  # get prediction
+        if y_pred == prediction and test_labels[i] == label:           # if the prediction and the label
+            yield i                                                    # are what we are after, yield the index
+
+def print_review(n):
+    word_index = tf.keras.datasets.imdb.get_word_index()                                                  # decoding work
+    reverse_word_index = {value:key for key,value in word_index.items()}
+    decoded_review = ' '.join([reverse_word_index.get(i - 3, '?') for i in test_data[n]])
+
+    y_pred = model.predict(x_test[n:n+1], verbose=0)[0,0]                                                 # predict
+    print(f"review: {n} | predicted: {y_pred:.6f} | rounded: {round(y_pred)} | label: {test_labels[n]}")  # print
+    print()
+    print(decoded_review, '\n')
+
+# find correctly classified reviews
+
+neg_neg = review_finder(prediction=0, label=0) # create a generator
+pos_pos = review_finder(prediction=1, label=1) # another generator#
+
+print_review(next(neg_neg)) # run again for the next one
+print_review(next(pos_pos))
+
+# find the reviews that are wrongly classified
+
+neg_pos = review_finder(prediction=0, label=1)
+pos_neg = review_finder(prediction=1, label=0)
+
+print_review(next(neg_pos))
+print_review(next(pos_neg))
 
