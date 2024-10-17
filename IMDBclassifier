@@ -1,0 +1,97 @@
+import os
+import numpy as np
+import tensorflow as tf
+
+import matplotlib.pyplot as plt
+plt.rcParams['lines.markersize'] = 2  # nice scatter point size
+
+# matplotlib shenanigans
+import matplotlib
+plt_fontsize = matplotlib.rcParams["font.size"]
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # mute some annoying warnings
+
+# download data                            # top 10000 most frequent words only, discard rare words 
+((train_data, train_labels), (test_data, test_labels)) = tf.keras.datasets.imdb.load_data(num_words=10000)
+print(train_data.shape, test_data.shape)
+
+# get words → index
+word_index = tf.keras.datasets.imdb.get_word_index()
+# reverse: index → word (Python dict comprehension)
+reverse_word_index = {value:key for key,value in word_index.items()}
+
+# turn our texts into multi-hot encodings
+def vectorize_sequences(sequences, dimension=10000):
+    results = np.zeros((len(sequences), dimension))     # a matrix of shape len(seq) x vocab, full of zeros
+    for i, sequence in enumerate(sequences):            # for each sequence:
+        results[i, sequence] = 1.                       # fill the appropriate indices with 1
+    return results                                      # note the NumPy magic! `sequence` is an array!
+                                                        # acting as the list of all indices where we want 1s
+
+# one hot encoding
+
+x_train = vectorize_sequences(train_data)
+x_test = vectorize_sequences(test_data)
+
+y_train = np.asarray(train_labels).astype('float32') # convert to float32
+y_test = np.asarray(test_labels).astype('float32')
+
+
+# building model
+
+model = tf.keras.models.Sequential()
+model.add(tf.keras.Input((10000,)))
+model.add(tf.keras.layers.Dense(16, activation='relu'))
+model.add(tf.keras.layers.Dense(16, activation='relu'))
+model.add(tf.keras.layers.Dense(1, activation='sigmoid')) # outputs a single number between 0 & 1: a single probability
+
+# compile model
+
+model.compile(                                                   
+    optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.001),  
+    loss=tf.keras.losses.binary_crossentropy,                   
+    metrics=['accuracy']
+)
+
+# get untrained baseline
+
+results = model.evaluate(x_test, y_test, verbose=0) # test our untrained net.
+print(f"loss: {results[0]}, accuracy: {results[1]}")
+
+# training
+
+partial_x_train = x_train[10000:]
+partial_y_train = y_train[10000:]
+
+x_val = x_train[:10000]
+y_val = y_train[:10000]
+
+history = model.fit( # note that a history object is returned by model.fit
+    partial_x_train,
+    partial_y_train,
+    epochs = 20,
+    batch_size = 512,
+    validation_data = (x_val, y_val)
+)
+
+
+
+
+
+
+
+# printing reviews
+
+#decoded_review = ' '.join(
+#    [                                      # get() works like [] but you can set a default
+#        reverse_word_index.get(i - 3, '?') # value if the key isn't found -3 because the first
+#        for i in train_data[100]           # three slots in the vocab are 0: "padding",
+#    ]                                      #                              1: "start of sequence",
+#)                                          #                              2: "unknown"
+
+#print(decoded_review)
+
+# another method
+#decoded_review = ' '.join([reverse_word_index.get(i - 3, '?') for i in train_data[83]])
+#print(decoded_review, '\n\nlabel: ', train_labels[83])
+
