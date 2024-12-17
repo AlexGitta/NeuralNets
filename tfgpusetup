@@ -133,7 +133,7 @@ conda create --name tf python=3.9
 conda activate tf
 
 
-pip install tensorflow[and-cuda]==2.16.1
+pip install tensorflow[and-cuda]==2.15.1
 
 python -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
 
